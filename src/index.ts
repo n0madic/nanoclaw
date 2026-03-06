@@ -541,10 +541,7 @@ async function main(): Promise<void> {
         // Directory may not exist yet — that's fine
       }
 
-      logger.info(
-        { chatJid, group: group.name },
-        'Session cleared',
-      );
+      logger.info({ chatJid, group: group.name }, 'Session cleared');
     },
   };
 
