@@ -541,6 +541,17 @@ async function main(): Promise<void> {
         // Directory may not exist yet — that's fine
       }
 
+      // Delete downloaded media — stale after session reset
+      const mediaDir = path.join(resolveGroupFolderPath(group.folder), 'media');
+      try {
+        const mediaFiles = fs.readdirSync(mediaDir);
+        for (const file of mediaFiles) {
+          fs.unlinkSync(path.join(mediaDir, file));
+        }
+      } catch {
+        // Directory may not exist — that's fine
+      }
+
       logger.info({ chatJid, group: group.name }, 'Session cleared');
     },
   };

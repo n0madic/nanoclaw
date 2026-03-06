@@ -1,7 +1,11 @@
+import fs from 'fs';
+import path from 'path';
+
 import { Bot } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
+import { resolveGroupFolderPath } from '../group-folder.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
@@ -218,6 +222,30 @@ export class TelegramChannel implements Channel {
       );
     });
 
+    // Download media file via Telegram Bot API and save to group's media folder
+    const downloadMedia = async (
+      fileId: string,
+      groupFolder: string,
+      filename: string,
+    ): Promise<string | null> => {
+      try {
+        const file = await this.bot!.api.getFile(fileId);
+        const url = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+        const resp = await fetch(url);
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        const mediaDir = path.join(
+          resolveGroupFolderPath(groupFolder),
+          'media',
+        );
+        fs.mkdirSync(mediaDir, { recursive: true });
+        fs.writeFileSync(path.join(mediaDir, filename), buffer);
+        return `media/${filename}`;
+      } catch (err) {
+        logger.warn({ err }, 'Failed to download Telegram media');
+        return null;
+      }
+    };
+
     // Handle non-text messages with placeholders so the agent knows something was sent
     const storeNonText = (ctx: any, placeholder: string) => {
       const chatJid = `tg:${ctx.chat.id}`;
@@ -252,18 +280,109 @@ export class TelegramChannel implements Channel {
       });
     };
 
-    this.bot.on('message:photo', (ctx) => storeNonText(ctx, '[Photo]'));
-    this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
-    this.bot.on('message:voice', (ctx) => storeNonText(ctx, '[Voice message]'));
-    this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
-    this.bot.on('message:document', (ctx) => {
-      const name = ctx.message.document?.file_name || 'file';
-      storeNonText(ctx, `[Document: ${name}]`);
+    this.bot.on('message:photo', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+      const msgId = ctx.message.message_id;
+      const photo = ctx.message.photo;
+      const fileId = photo[photo.length - 1].file_id;
+      const mediaPath = await downloadMedia(
+        fileId,
+        group.folder,
+        `photo_${msgId}.jpg`,
+      );
+      const placeholder = mediaPath
+        ? `[Photo: ${mediaPath}]`
+        : '[Photo]';
+      storeNonText(ctx, placeholder);
     });
-    this.bot.on('message:sticker', (ctx) => {
+
+    this.bot.on('message:video', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+      const msgId = ctx.message.message_id;
+      const mediaPath = await downloadMedia(
+        ctx.message.video.file_id,
+        group.folder,
+        `video_${msgId}.mp4`,
+      );
+      const placeholder = mediaPath
+        ? `[Video: ${mediaPath}]`
+        : '[Video]';
+      storeNonText(ctx, placeholder);
+    });
+
+    this.bot.on('message:voice', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+      const msgId = ctx.message.message_id;
+      const mediaPath = await downloadMedia(
+        ctx.message.voice.file_id,
+        group.folder,
+        `voice_${msgId}.ogg`,
+      );
+      const placeholder = mediaPath
+        ? `[Voice message: ${mediaPath}]`
+        : '[Voice message]';
+      storeNonText(ctx, placeholder);
+    });
+
+    this.bot.on('message:audio', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+      const msgId = ctx.message.message_id;
+      const fileName = ctx.message.audio.file_name;
+      const ext = fileName
+        ? fileName.split('.').pop() || 'mp3'
+        : 'mp3';
+      const mediaPath = await downloadMedia(
+        ctx.message.audio.file_id,
+        group.folder,
+        `audio_${msgId}.${ext}`,
+      );
+      const placeholder = mediaPath
+        ? `[Audio: ${mediaPath}]`
+        : '[Audio]';
+      storeNonText(ctx, placeholder);
+    });
+
+    this.bot.on('message:document', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+      const origName = ctx.message.document?.file_name || 'file';
+      const mediaPath = await downloadMedia(
+        ctx.message.document.file_id,
+        group.folder,
+        origName,
+      );
+      const placeholder = mediaPath
+        ? `[Document: ${mediaPath}]`
+        : `[Document: ${origName}]`;
+      storeNonText(ctx, placeholder);
+    });
+
+    this.bot.on('message:sticker', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+      const msgId = ctx.message.message_id;
       const emoji = ctx.message.sticker?.emoji || '';
-      storeNonText(ctx, `[Sticker ${emoji}]`);
+      const mediaPath = await downloadMedia(
+        ctx.message.sticker.file_id,
+        group.folder,
+        `sticker_${msgId}.webp`,
+      );
+      const placeholder = mediaPath
+        ? `[Sticker: ${mediaPath}]`
+        : `[Sticker ${emoji}]`;
+      storeNonText(ctx, placeholder);
     });
+
     this.bot.on('message:location', (ctx) => storeNonText(ctx, '[Location]'));
     this.bot.on('message:contact', (ctx) => storeNonText(ctx, '[Contact]'));
 
