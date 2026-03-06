@@ -292,9 +292,7 @@ export class TelegramChannel implements Channel {
         group.folder,
         `photo_${msgId}.jpg`,
       );
-      const placeholder = mediaPath
-        ? `[Photo: ${mediaPath}]`
-        : '[Photo]';
+      const placeholder = mediaPath ? `[Photo: ${mediaPath}]` : '[Photo]';
       storeNonText(ctx, placeholder);
     });
 
@@ -308,9 +306,7 @@ export class TelegramChannel implements Channel {
         group.folder,
         `video_${msgId}.mp4`,
       );
-      const placeholder = mediaPath
-        ? `[Video: ${mediaPath}]`
-        : '[Video]';
+      const placeholder = mediaPath ? `[Video: ${mediaPath}]` : '[Video]';
       storeNonText(ctx, placeholder);
     });
 
@@ -336,17 +332,13 @@ export class TelegramChannel implements Channel {
       if (!group) return;
       const msgId = ctx.message.message_id;
       const fileName = ctx.message.audio.file_name;
-      const ext = fileName
-        ? fileName.split('.').pop() || 'mp3'
-        : 'mp3';
+      const ext = fileName ? fileName.split('.').pop() || 'mp3' : 'mp3';
       const mediaPath = await downloadMedia(
         ctx.message.audio.file_id,
         group.folder,
         `audio_${msgId}.${ext}`,
       );
-      const placeholder = mediaPath
-        ? `[Audio: ${mediaPath}]`
-        : '[Audio]';
+      const placeholder = mediaPath ? `[Audio: ${mediaPath}]` : '[Audio]';
       storeNonText(ctx, placeholder);
     });
 
