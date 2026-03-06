@@ -15,6 +15,28 @@ import {
   RegisteredGroup,
 } from '../types.js';
 
+/**
+ * Wrap bare file references (e.g. bridge.ts, config.md) in <code> tags to
+ * prevent Telegram from auto-linking extensions like .ts or .md as domains.
+ * Skips content already inside <pre> or <code> blocks.
+ */
+function wrapFileRefs(html: string): string {
+  const fileRe =
+    /\b([\w][\w.-]*\.(ts|tsx|js|jsx|py|go|md|json|yaml|yml|sh|css|html|txt|log|env|toml|lock))\b/g;
+  let insideCode = 0;
+  return html
+    .split(/(<\/?(?:pre|code)[^>]*>)/)
+    .map((seg, i) => {
+      if (i % 2 === 1) {
+        if (/^<(?:pre|code)/.test(seg)) insideCode++;
+        else insideCode = Math.max(0, insideCode - 1);
+        return seg;
+      }
+      return insideCode === 0 ? seg.replace(fileRe, '<code>$1</code>') : seg;
+    })
+    .join('');
+}
+
 export function markdownToTelegramHtml(md: string): string {
   const escapeHtml = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -67,7 +89,7 @@ export function markdownToTelegramHtml(md: string): string {
   out = out.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeBlocks[+i]);
   out = out.replace(/\x00INLINE(\d+)\x00/g, (_, i) => inlineCodes[+i]);
 
-  return out.trim();
+  return wrapFileRefs(out.trim());
 }
 
 export interface TelegramChannelOpts {
