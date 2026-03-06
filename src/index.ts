@@ -3,6 +3,7 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
+  DATA_DIR,
   IDLE_TIMEOUT,
   POLL_INTERVAL,
   TIMEZONE,
@@ -26,6 +27,7 @@ import {
 import {
   getAllChats,
   getAllRegisteredGroups,
+  deleteSession,
   getAllSessions,
   getAllTasks,
   getMessagesSince,
@@ -507,6 +509,43 @@ async function main(): Promise<void> {
       isGroup?: boolean,
     ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => registeredGroups,
+    onClearSession: (chatJid: string) => {
+      const group = registeredGroups[chatJid];
+      if (!group) return;
+
+      // Clear in-memory session
+      delete sessions[group.folder];
+
+      // Clear from SQLite
+      deleteSession(group.folder);
+
+      // Reset agent timestamp
+      lastAgentTimestamp[chatJid] = '';
+      saveState();
+
+      // Delete session JSONL files so the agent truly forgets
+      const sessionDir = path.join(
+        DATA_DIR,
+        'sessions',
+        group.folder,
+        '.claude',
+      );
+      try {
+        const files = fs.readdirSync(sessionDir);
+        for (const file of files) {
+          if (file.endsWith('.jsonl')) {
+            fs.unlinkSync(path.join(sessionDir, file));
+          }
+        }
+      } catch {
+        // Directory may not exist yet — that's fine
+      }
+
+      logger.info(
+        { chatJid, group: group.name },
+        'Session cleared',
+      );
+    },
   };
 
   // Create and connect all registered channels.
