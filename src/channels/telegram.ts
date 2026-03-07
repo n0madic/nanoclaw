@@ -37,7 +37,35 @@ function wrapFileRefs(html: string): string {
     .join('');
 }
 
+/**
+ * Regex matching HTML tags that Telegram's Bot API accepts natively.
+ * Opening tags (with optional attributes) and closing tags are both matched.
+ */
+const TG_TAG_RE =
+  /<\/?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|tg-spoiler|tg-emoji)(?:\s[^>]*)?>|<a\s+href="[^"]*"[^>]*>|<\/a>/gi;
+
+/**
+ * HTML tags that are NOT valid in Telegram but have reasonable text
+ * equivalents — convert before escaping so they don't appear as raw tags.
+ */
+function stripNonTgHtml(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?p>/gi, '\n')
+    .replace(/<\/?(?:div|span|h[1-6]|ul|ol|li|section|article|header|footer|nav|main|figure|figcaption|table|tr|td|th|thead|tbody|img|hr)[^>]*>/gi, '');
+}
+
 export function markdownToTelegramHtml(md: string): string {
+  // Strip non-Telegram HTML tags first (br→newline, etc.)
+  md = stripNonTgHtml(md);
+
+  // Preserve Telegram-valid HTML tags from escaping
+  const tgTags: string[] = [];
+  md = md.replace(TG_TAG_RE, (tag) => {
+    tgTags.push(tag);
+    return `\x00TG${tgTags.length - 1}\x00`;
+  });
+
   const escapeHtml = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -89,6 +117,9 @@ export function markdownToTelegramHtml(md: string): string {
   out = out.replace(/\x00CODE(\d+)\x00/g, (_, i) => codeBlocks[+i]);
   out = out.replace(/\x00INLINE(\d+)\x00/g, (_, i) => inlineCodes[+i]);
 
+  // Restore preserved Telegram HTML tags
+  out = out.replace(/\x00TG(\d+)\x00/g, (_, i) => tgTags[+i]);
+
   return wrapFileRefs(out.trim());
 }
 
@@ -97,6 +128,54 @@ export interface TelegramChannelOpts {
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
   onClearSession?: (chatJid: string) => void;
+}
+
+const CHUNK_LIMIT = 3800;
+
+export function splitMarkdown(text: string): string[] {
+  if (text.length <= CHUNK_LIMIT) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > CHUNK_LIMIT) {
+    let splitAt = -1;
+    let inCodeBlock = false;
+    let lastSafeParagraph = -1;
+    let lastSafeLine = -1;
+
+    for (let i = 0; i < Math.min(remaining.length, CHUNK_LIMIT); i++) {
+      if (remaining[i] === '`' && remaining.slice(i, i + 3) === '```') {
+        const atLineStart = i === 0 || remaining[i - 1] === '\n';
+        if (atLineStart) {
+          inCodeBlock = !inCodeBlock;
+          i += 2;
+          continue;
+        }
+      }
+      if (!inCodeBlock) {
+        if (remaining[i] === '\n' && remaining[i + 1] === '\n') {
+          lastSafeParagraph = i;
+        } else if (remaining[i] === '\n') {
+          lastSafeLine = i;
+        }
+      }
+    }
+
+    if (lastSafeParagraph > 500) splitAt = lastSafeParagraph;
+    else if (lastSafeLine > 0) splitAt = lastSafeLine;
+    else splitAt = CHUNK_LIMIT;
+
+    chunks.push(remaining.slice(0, splitAt));
+    const next = remaining.slice(splitAt);
+    remaining = next.startsWith('\n\n')
+      ? next.slice(2)
+      : next.startsWith('\n')
+        ? next.slice(1)
+        : next;
+  }
+
+  if (remaining) chunks.push(remaining);
+  return chunks;
 }
 
 export class TelegramChannel implements Channel {
@@ -423,34 +502,30 @@ export class TelegramChannel implements Channel {
     });
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
-    if (!this.bot) {
-      logger.warn('Telegram bot not initialized');
-      return;
+  private async _sendWithRetry(chatId: string, text: string): Promise<void> {
+    const html = markdownToTelegramHtml(text);
+    try {
+      await this.bot!.api.sendMessage(chatId, html, { parse_mode: 'HTML' });
+    } catch (err: any) {
+      // Telegram rejected the HTML (e.g. unclosed tag) — retry as plain text
+      logger.warn({ chatId, err: err?.message }, 'HTML send failed, retrying as plain text');
+      await this.bot!.api.sendMessage(chatId, text);
     }
+    logger.info({ chatId, length: text.length }, 'Telegram message sent');
+  }
 
+  async sendMessage(jid: string, text: string): Promise<void> {
+    if (!this.bot) return;
     try {
       const numericId = jid.replace(/^tg:/, '');
-      const html = markdownToTelegramHtml(text);
 
-      // Telegram has a 4096 character limit per message — split if needed
-      const MAX_LENGTH = 4096;
-      if (html.length <= MAX_LENGTH) {
-        await this.bot.api.sendMessage(numericId, html, {
-          parse_mode: 'HTML',
-        });
-      } else {
-        for (let i = 0; i < html.length; i += MAX_LENGTH) {
-          await this.bot.api.sendMessage(
-            numericId,
-            html.slice(i, i + MAX_LENGTH),
-            { parse_mode: 'HTML' },
-          );
-        }
+      // Smart split at paragraph/line boundaries, avoiding code block mid-cuts
+      const chunks = splitMarkdown(text);
+      for (const chunk of chunks) {
+        await this._sendWithRetry(numericId, chunk);
       }
-      logger.info({ jid, length: text.length }, 'Telegram message sent');
     } catch (err) {
-      logger.error({ jid, err }, 'Failed to send Telegram message');
+      logger.warn({ jid, err }, 'Telegram sendMessage failed');
     }
   }
 
