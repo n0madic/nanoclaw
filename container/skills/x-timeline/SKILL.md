@@ -1,7 +1,7 @@
 ---
 name: x-timeline
 description: Fetch a Twitter/X user's public timeline. Use when the user asks about someone's tweets, Twitter activity, or X posts.
-allowed-tools: Bash(x-timeline:*)
+allowed-tools: Bash(x-syndication:*)
 ---
 
 # Twitter/X Timeline Fetcher
@@ -9,8 +9,7 @@ allowed-tools: Bash(x-timeline:*)
 ## Quick start
 
 ```bash
-node ~/.claude/skills/x-timeline/x-timeline.mjs <username>
-node ~/.claude/skills/x-timeline/x-timeline.mjs <username> --count 10
+npx tsx ~/.claude/skills/x-timeline/x-syndication.ts <username>
 ```
 
 ## Accepted input formats
@@ -24,19 +23,15 @@ username
 
 ```bash
 # Get latest tweets from a user
-node ~/.claude/skills/x-timeline/x-timeline.mjs elonmusk
-
-# Get only 5 most recent tweets
-node ~/.claude/skills/x-timeline/x-timeline.mjs @anthropic --count 5
+npx tsx ~/.claude/skills/x-timeline/x-syndication.ts elonmusk
 
 # Pipe to file for analysis
-node ~/.claude/skills/x-timeline/x-timeline.mjs username > tweets.txt
+npx tsx ~/.claude/skills/x-timeline/x-syndication.ts username > tweets.txt
 ```
 
 ## Notes
 
-- No API keys required — uses guest token auth
-- Returns up to 40 tweets per request (Twitter API limit)
+- No API keys required — uses Twitter syndication endpoint
 - Output is structured text optimized for LLM analysis
 - Rate limits apply — wait a minute if you get rate-limited
 - Only fetches public timelines (private/protected accounts will fail)
