@@ -58,9 +58,100 @@ function stripNonTgHtml(text: string): string {
     );
 }
 
+/**
+ * Strip markdown inline formatting (bold, italic, code, links) to get plain text.
+ */
+function stripMdInline(s: string): string {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/\*([^*]+?)\*/g, '$1')
+    .replace(/(?<![_\w])_([^_]+?)_(?![_\w])/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+}
+
+/**
+ * Detect markdown table blocks and convert them to fenced code blocks
+ * with box-drawing characters and aligned columns.
+ */
+function convertMarkdownTables(text: string): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    // A table needs at least: header row, separator row
+    if (
+      /^\|(.+\|)+\s*$/.test(lines[i]) &&
+      i + 1 < lines.length &&
+      /^\|[\s:]*-+[\s:]*(\|[\s:]*-+[\s:]*)+\|?\s*$/.test(lines[i + 1])
+    ) {
+      const tableLines: string[] = [];
+      tableLines.push(lines[i]);
+      tableLines.push(lines[i + 1]);
+      let j = i + 2;
+      while (j < lines.length && /^\|(.+\|)+\s*$/.test(lines[j])) {
+        tableLines.push(lines[j]);
+        j++;
+      }
+
+      // Parse cells (skip separator row), strip markdown formatting
+      const rows = tableLines
+        .filter((_, idx) => idx !== 1)
+        .map((line) =>
+          line
+            .replace(/^\|/, '')
+            .replace(/\|$/, '')
+            .split('|')
+            .map((c) => stripMdInline(c.trim())),
+        );
+
+      // Calculate column widths
+      const colCount = Math.max(...rows.map((r) => r.length));
+      const widths: number[] = [];
+      for (let c = 0; c < colCount; c++) {
+        widths.push(Math.max(...rows.map((r) => (r[c] || '').length), 1));
+      }
+
+      // Render as aligned text table with box-drawing chars
+      const pad = (s: string, w: number) =>
+        s + ' '.repeat(Math.max(0, w - s.length));
+      const renderRow = (cells: string[]) =>
+        '│ ' +
+        widths.map((w, c) => pad(cells[c] || '', w)).join(' │ ') +
+        ' │';
+      const hLine = (l: string, m: string, r: string, fill: string) =>
+        l + widths.map((w) => fill.repeat(w + 2)).join(m) + r;
+
+      const preLines: string[] = [];
+      preLines.push(hLine('┌', '┬', '┐', '─'));
+      preLines.push(renderRow(rows[0])); // header
+      preLines.push(hLine('├', '┼', '┤', '─'));
+      for (let r = 1; r < rows.length; r++) {
+        preLines.push(renderRow(rows[r]));
+      }
+      preLines.push(hLine('└', '┴', '┘', '─'));
+
+      // Wrap as fenced code block so existing code-block logic protects it
+      result.push('```\n' + preLines.join('\n') + '\n```');
+      i = j;
+    } else {
+      result.push(lines[i]);
+      i++;
+    }
+  }
+
+  return result.join('\n');
+}
+
 export function markdownToTelegramHtml(md: string): string {
   // Strip non-Telegram HTML tags first (br→newline, etc.)
   md = stripNonTgHtml(md);
+
+  // Convert markdown tables to <pre> blocks before further processing
+  md = convertMarkdownTables(md);
 
   // Preserve Telegram-valid HTML tags from escaping
   const tgTags: string[] = [];
