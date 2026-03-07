@@ -344,6 +344,21 @@ export class TelegramChannel implements Channel {
 
       const chatJid = `tg:${ctx.chat.id}`;
       let content = ctx.message.text;
+
+      // Handle reply context — include the message being replied to
+      if (ctx.message.reply_to_message) {
+        const replied = ctx.message.reply_to_message;
+        const replyAuthor =
+          replied.from?.first_name ||
+          replied.from?.username ||
+          replied.from?.id?.toString() ||
+          'Unknown';
+        const replyText = replied.text || replied.caption || '[media]';
+        const truncated =
+          replyText.length > 200 ? replyText.slice(0, 200) + '…' : replyText;
+        content = `[Reply to ${replyAuthor}: "${truncated}"]\n${content}`;
+      }
+
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =
         ctx.from?.first_name ||
@@ -454,6 +469,21 @@ export class TelegramChannel implements Channel {
         ctx.from?.id?.toString() ||
         'Unknown';
       const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+      let content = `${placeholder}${caption}`;
+
+      // Handle reply context
+      if (ctx.message.reply_to_message) {
+        const replied = ctx.message.reply_to_message;
+        const replyAuthor =
+          replied.from?.first_name ||
+          replied.from?.username ||
+          replied.from?.id?.toString() ||
+          'Unknown';
+        const replyText = replied.text || replied.caption || '[media]';
+        const truncated =
+          replyText.length > 200 ? replyText.slice(0, 200) + '…' : replyText;
+        content = `[Reply to ${replyAuthor}: "${truncated}"]\n${content}`;
+      }
 
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
@@ -469,7 +499,7 @@ export class TelegramChannel implements Channel {
         chat_jid: chatJid,
         sender: ctx.from?.id?.toString() || '',
         sender_name: senderName,
-        content: `${placeholder}${caption}`,
+        content,
         timestamp,
         is_from_me: false,
       });
