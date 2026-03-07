@@ -52,7 +52,10 @@ function stripNonTgHtml(text: string): string {
   return text
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/?p>/gi, '\n')
-    .replace(/<\/?(?:div|span|h[1-6]|ul|ol|li|section|article|header|footer|nav|main|figure|figcaption|table|tr|td|th|thead|tbody|img|hr)[^>]*>/gi, '');
+    .replace(
+      /<\/?(?:div|span|h[1-6]|ul|ol|li|section|article|header|footer|nav|main|figure|figcaption|table|tr|td|th|thead|tbody|img|hr)[^>]*>/gi,
+      '',
+    );
 }
 
 export function markdownToTelegramHtml(md: string): string {
@@ -508,7 +511,10 @@ export class TelegramChannel implements Channel {
       await this.bot!.api.sendMessage(chatId, html, { parse_mode: 'HTML' });
     } catch (err: any) {
       // Telegram rejected the HTML (e.g. unclosed tag) — retry as plain text
-      logger.warn({ chatId, err: err?.message }, 'HTML send failed, retrying as plain text');
+      logger.warn(
+        { chatId, err: err?.message },
+        'HTML send failed, retrying as plain text',
+      );
       await this.bot!.api.sendMessage(chatId, text);
     }
     logger.info({ chatId, length: text.length }, 'Telegram message sent');

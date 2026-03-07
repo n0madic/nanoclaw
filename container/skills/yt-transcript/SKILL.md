@@ -9,10 +9,10 @@ allowed-tools: Bash(yt-transcript:*)
 ## Quick start
 
 ```bash
-yt-transcript <youtube-url-or-id>              # plain text transcript
-yt-transcript <url-or-id> --timestamps         # with [MM:SS] timestamps
-yt-transcript <url-or-id> --lang uk            # specific language
-yt-transcript <url-or-id> --list-langs         # show available languages
+node ~/.claude/skills/yt-transcript/yt-transcript.mjs <youtube-url-or-id>
+node ~/.claude/skills/yt-transcript/yt-transcript.mjs <url-or-id> --timestamps
+node ~/.claude/skills/yt-transcript/yt-transcript.mjs <url-or-id> --lang uk
+node ~/.claude/skills/yt-transcript/yt-transcript.mjs <url-or-id> --list-langs
 ```
 
 ## Accepted URL formats
@@ -27,16 +27,16 @@ VIDEO_ID
 
 ```bash
 # Get transcript as plain text
-yt-transcript https://www.youtube.com/watch?v=dQw4w9WgXcQ
+node ~/.claude/skills/yt-transcript/yt-transcript.mjs https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
 # Check which languages are available first
-yt-transcript VIDEO_ID --list-langs
+node ~/.claude/skills/yt-transcript/yt-transcript.mjs VIDEO_ID --list-langs
 
 # Get Ukrainian transcript with timestamps
-yt-transcript VIDEO_ID --lang uk --timestamps
+node ~/.claude/skills/yt-transcript/yt-transcript.mjs VIDEO_ID --lang uk --timestamps
 
 # Pipe to file for analysis
-yt-transcript VIDEO_ID > transcript.txt
+node ~/.claude/skills/yt-transcript/yt-transcript.mjs VIDEO_ID > transcript.txt
 ```
 
 ## Notes

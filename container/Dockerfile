@@ -34,9 +34,6 @@ ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 # Install agent-browser, claude-code, and youtube-transcript-plus globally
 RUN npm install -g agent-browser @anthropic-ai/claude-code youtube-transcript-plus
 
-# Install yt-transcript CLI wrapper
-COPY tools/yt-transcript/index.mjs /usr/local/bin/yt-transcript
-
 # Create app directory
 WORKDIR /app
 
